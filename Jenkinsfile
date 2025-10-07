@@ -11,10 +11,23 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo '📦 Checking out code from GitHub...'
-                // Clean workspace first
                 deleteDir()
-                // Clone main branch explicitly
                 git branch: 'main', url: "${REPO_URL}"
+            }
+        }
+
+        stage('Install Node.js if Missing') {
+            steps {
+                echo '🧩 Checking and installing Node.js if not present...'
+                sh '''
+                    if ! command -v node &> /dev/null; then
+                        echo "Node.js not found. Installing..."
+                        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                        sudo apt-get install -y nodejs
+                    else
+                        echo "✅ Node.js already installed. Version: $(node -v)"
+                    fi
+                '''
             }
         }
 
@@ -26,14 +39,14 @@ pipeline {
                         echo "Node.js project detected. Installing dependencies..."
                         npm install
                         echo "✅ Running tests (if any)..."
-                        npm test || echo "No test script found."
+                        npm test || echo "⚠️ No test script found."
                     elif [ -f requirements.txt ]; then
                         echo "Python project detected. Installing dependencies..."
                         pip install -r requirements.txt
                         echo "✅ Running tests (if any)..."
-                        pytest || echo "No tests found."
+                        pytest || echo "⚠️ No tests found."
                     else
-                        echo "No recognized project type found."
+                        echo "⚠️ No recognized project type found."
                     fi
                 '''
             }
@@ -50,7 +63,7 @@ pipeline {
 
         stage('Push to Docker Hub') {
             environment {
-                DOCKER_HUB_CREDENTIALS = credentials('dockerhub-creds') // Jenkins credentials ID
+                DOCKER_HUB_CREDENTIALS = credentials('ashokdocke')
             }
             steps {
                 echo '📤 Pushing Docker image to Docker Hub...'
