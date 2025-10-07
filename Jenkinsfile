@@ -3,8 +3,9 @@ pipeline {
 
     environment {
         REPO_URL = 'https://github.com/ashokckumar/abcede.git'
-        DOCKER_IMAGE = 'ashokdocke/abcede'   // Replace with your Docker Hub repo
+        DOCKER_IMAGE = 'ashokdocke/abcede'
         DOCKER_TAG = 'latest'
+        NODE_VERSION = 'v20.10.0'
     }
 
     stages {
@@ -16,14 +17,20 @@ pipeline {
             }
         }
 
-        stage('Install Node.js if Missing') {
+        stage('Install Node.js if Missing (No Sudo)') {
             steps {
-                echo '🧩 Checking and installing Node.js if not present...'
+                echo '🧩 Checking and installing Node.js (non-sudo)...'
                 sh '''
                     if ! command -v node &> /dev/null; then
-                        echo "Node.js not found. Installing..."
-                        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-                        sudo apt-get install -y nodejs
+                        echo "Node.js not found. Installing locally..."
+                        mkdir -p $HOME/.local/bin
+                        curl -fsSL https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.xz -o node.tar.xz
+                        tar -xf node.tar.xz
+                        mv node-${NODE_VERSION}-linux-x64 $HOME/.local/node
+                        export PATH=$HOME/.local/node/bin:$PATH
+                        echo "export PATH=$HOME/.local/node/bin:$PATH" >> $HOME/.bashrc
+                        node -v
+                        npm -v
                     else
                         echo "✅ Node.js already installed. Version: $(node -v)"
                     fi
@@ -35,18 +42,13 @@ pipeline {
             steps {
                 echo '🧪 Installing dependencies and running tests...'
                 sh '''
+                    export PATH=$HOME/.local/node/bin:$PATH
                     if [ -f package.json ]; then
-                        echo "Node.js project detected. Installing dependencies..."
+                        echo "Installing Node.js dependencies..."
                         npm install
-                        echo "✅ Running tests (if any)..."
                         npm test || echo "⚠️ No test script found."
-                    elif [ -f requirements.txt ]; then
-                        echo "Python project detected. Installing dependencies..."
-                        pip install -r requirements.txt
-                        echo "✅ Running tests (if any)..."
-                        pytest || echo "⚠️ No tests found."
                     else
-                        echo "⚠️ No recognized project type found."
+                        echo "⚠️ No package.json found. Skipping Node steps."
                     fi
                 '''
             }
@@ -63,7 +65,7 @@ pipeline {
 
         stage('Push to Docker Hub') {
             environment {
-                DOCKER_HUB_CREDENTIALS = credentials('ashokdocke')
+                DOCKER_HUB_CREDENTIALS = credentials('docker-hub-credentials')
             }
             steps {
                 echo '📤 Pushing Docker image to Docker Hub...'
